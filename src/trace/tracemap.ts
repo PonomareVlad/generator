@@ -257,11 +257,11 @@ export default class TraceMap {
       await this.traceUrl(resolvedUrl.href, parentUrl, env);
       return resolvedUrl.href;
     }
-  
+
     const parsed = parsePkg(specifier);
     if (!parsed) throw new JspmError(`Invalid package name ${specifier}`);
     const { pkgName, subpath } = parsed;
-  
+
     // Subscope override
     const scopeMatches = getScopeMatches(parentUrl, this.map.scopes, this.map.baseUrl);
     const pkgSubscopes = scopeMatches.filter(([, url]) => url.startsWith(parentPkgUrl));
@@ -269,14 +269,17 @@ export default class TraceMap {
       for (const [scope] of pkgSubscopes) {
         const mapMatch = getMapMatch(specifier, this.map.scopes[scope]);
         if (mapMatch) {
-          const resolved = await this.resolver.realPath(new URL(this.map.scopes[scope][mapMatch] + specifier.slice(mapMatch.length), this.map.baseUrl).href);
+          const subpath = mapMatch.endsWith('/*') ? specifier.slice(mapMatch.length - 1) : specifier.slice(mapMatch.length)
+          const path = mapMatch.endsWith('/*') && !this.map.scopes[scope][mapMatch].toString().endsWith('/') ?
+              new URL(subpath, this.map.scopes[scope][mapMatch].toString()) : (this.map.scopes[scope][mapMatch] + subpath)
+          const resolved = await this.resolver.realPath(new URL(path, this.map.baseUrl).href);
           this.log('trace', `${specifier} ${parentUrl.href} -> ${resolved}`);
           await this.traceUrl(resolved, parentUrl, env);
           return resolved;
         }
       }
     }
-  
+
     // Scope override
     const userScopeMatch = scopeMatches.find(([, url]) => url === parentPkgUrl);
     if (userScopeMatch) {
@@ -313,7 +316,8 @@ export default class TraceMap {
       const match = getMapMatch(specifier, pcfg.imports);
       if (!match)
         throw new JspmError(`No '${specifier}' import defined in ${parentPkgUrl}${importedFrom(parentUrl)}.`);
-      const target = resolvePackageTarget(pcfg.imports[match], parentPkgUrl, env, specifier.slice(match.length), this.installer, true);
+      const subpath = match.endsWith('/*') ? specifier.slice(match.length - 1) : specifier.slice(match.length)
+      const target = resolvePackageTarget(pcfg.imports[match], parentPkgUrl, env, subpath, this.installer, true);
       if (!isURL(target)) {
         return this.trace(target, parentUrl, env);
       }
